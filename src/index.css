@@ -1,0 +1,57 @@
+@import 'tailwindcss';
+
+:root {
+  --bg-deep: #0b0a14;
+  --bg-card: #16132a;
+  --accent: #8b5cf6;
+  --accent-warm: #f59e0b;
+  --danger: #ef4444;
+  --safe: #22c55e;
+  --text: #f5f3ff;
+  --muted: #a5a1c0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background: radial-gradient(1200px 600px at 50% -10%, #2a1f55 0%, var(--bg-deep) 55%);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.safe-pad {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+.phase-night {
+  background: radial-gradient(900px 500px at 50% -20%, #1e1b4b 0%, #0b0a14 60%);
+}
+
+.phase-day {
+  background: radial-gradient(900px 500px at 50% -20%, #3b2a14 0%, #0b0a14 60%);
+}
+
+.phase-danger {
+  background: radial-gradient(900px 500px at 50% -20%, #3f1212 0%, #0b0a14 60%);
+}
