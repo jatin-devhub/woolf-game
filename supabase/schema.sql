@@ -1027,27 +1027,30 @@ begin
     raise exception 'BAD_ACTION' using errcode = 'P0001';
   end if;
 
-  if p_target_id is null then
+  -- Wolves must pick a victim. Doctor/police may skip (null target) so AFK does not soft-lock night.
+  if p_action_type = 'kill_vote' and p_target_id is null then
     raise exception 'TARGET_REQUIRED' using errcode = 'P0001';
   end if;
 
-  select * into tgt from public.players where id = p_target_id and room_id = p_room_id;
-  if not found or not tgt.is_alive then
-    raise exception 'INVALID_TARGET' using errcode = 'P0001';
-  end if;
-
-  if p_action_type = 'kill_vote' then
-    if tgt.role = 'werewolf' then
-      raise exception 'CANNOT_TARGET_ALLY' using errcode = 'P0001';
+  if p_target_id is not null then
+    select * into tgt from public.players where id = p_target_id and room_id = p_room_id;
+    if not found or not tgt.is_alive then
+      raise exception 'INVALID_TARGET' using errcode = 'P0001';
     end if;
-    if r.wolf_ballot_round > 1 and not (p_target_id = any (r.wolf_revote_target_ids)) then
-      raise exception 'TARGET_NOT_IN_REVOTE' using errcode = 'P0001';
-    end if;
-  end if;
 
-  -- police cannot peek self; doctor may self-protect
-  if p_action_type = 'peek' and p_target_id = me.id then
-    raise exception 'CANNOT_PEEK_SELF' using errcode = 'P0001';
+    if p_action_type = 'kill_vote' then
+      if tgt.role = 'werewolf' then
+        raise exception 'CANNOT_TARGET_ALLY' using errcode = 'P0001';
+      end if;
+      if r.wolf_ballot_round > 1 and not (p_target_id = any (r.wolf_revote_target_ids)) then
+        raise exception 'TARGET_NOT_IN_REVOTE' using errcode = 'P0001';
+      end if;
+    end if;
+
+    -- police cannot peek self; doctor may self-protect
+    if p_action_type = 'peek' and p_target_id = me.id then
+      raise exception 'CANNOT_PEEK_SELF' using errcode = 'P0001';
+    end if;
   end if;
 
   insert into public.night_actions(room_id, night_number, player_id, action_type, target_id, ballot_round)
@@ -1207,11 +1210,12 @@ declare
 begin
   me := public._wg_player(p_room_id, p_token);
   select * into r from public.rooms where id = p_room_id for update;
-  if r.phase <> 'ENDED' then
-    raise exception 'NOT_ENDED' using errcode = 'P0001';
-  end if;
   if r.host_player_id <> me.id then
     raise exception 'HOST_ONLY' using errcode = 'P0001';
+  end if;
+  -- Host may restart mid-game or after ENDED (not only when the match finished).
+  if r.phase = 'LOBBY' then
+    return jsonb_build_object('ok', true, 'already_lobby', true);
   end if;
 
   delete from public.night_actions where room_id = p_room_id;
@@ -1276,6 +1280,15 @@ declare
   v_stage text;
   ready_count int;
   living int;
+  host_status jsonb;
+  wolves_living int;
+  wolves_voted int;
+  doctor_living int;
+  doctor_acted int;
+  police_living int;
+  police_acted int;
+  votes_cast int;
+  blocking text[] := '{}';
 begin
   me := public._wg_player(p_room_id, p_token);
   select * into r from public.rooms where id = p_room_id;
@@ -1316,7 +1329,7 @@ begin
     select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'display_name', p.display_name) order by p.seat_order), '[]'::jsonb)
     into wolf_allies
     from public.players p
-    where p.room_id = p_room_id and p.role = 'werewolf' and p.id <> me.id;
+    where p.room_id = p_room_id and p.role = 'werewolf' and p.is_alive and p.id <> me.id;
 
     select coalesce(jsonb_agg(jsonb_build_object(
       'voter_id', na.player_id,
@@ -1390,6 +1403,84 @@ begin
       select 1 from public.player_ready_flags where room_id = p_room_id and phase = r.phase and player_id = me.id
     )
   );
+
+  -- Host-only progress (role counts only — never names night identities)
+  if me.is_host and r.phase not in ('LOBBY', 'ENDED') then
+    host_status := jsonb_build_object('phase', r.phase);
+
+    if r.phase = 'NIGHT' then
+      select count(*) into wolves_living from public.players where room_id = p_room_id and is_alive and role = 'werewolf';
+      select count(*) into wolves_voted
+      from public.night_actions na
+      join public.players p on p.id = na.player_id
+      where na.room_id = p_room_id and na.night_number = r.night_number
+        and na.action_type = 'kill_vote' and na.ballot_round = r.wolf_ballot_round
+        and p.role = 'werewolf' and p.is_alive and na.target_id is not null;
+
+      select count(*) into doctor_living from public.players where room_id = p_room_id and is_alive and role = 'doctor';
+      select count(*) into doctor_acted
+      from public.night_actions na
+      join public.players p on p.id = na.player_id
+      where na.room_id = p_room_id and na.night_number = r.night_number
+        and na.action_type = 'protect' and p.role = 'doctor' and p.is_alive;
+
+      select count(*) into police_living from public.players where room_id = p_room_id and is_alive and role = 'police';
+      select count(*) into police_acted
+      from public.night_actions na
+      join public.players p on p.id = na.player_id
+      where na.room_id = p_room_id and na.night_number = r.night_number
+        and na.action_type = 'peek' and p.role = 'police' and p.is_alive;
+
+      blocking := '{}';
+      if wolves_living > 0 and wolves_voted < wolves_living then
+        blocking := blocking || array['wolves'];
+      end if;
+      if r.wolf_ballot_round = 1 then
+        if doctor_living > 0 and doctor_acted < doctor_living then
+          blocking := blocking || array['doctor'];
+        end if;
+        if police_living > 0 and police_acted < police_living then
+          blocking := blocking || array['police'];
+        end if;
+      end if;
+
+      host_status := host_status || jsonb_build_object(
+        'night', jsonb_build_object(
+          'wolves_living', wolves_living,
+          'wolves_voted', wolves_voted,
+          'doctor_living', doctor_living,
+          'doctor_acted', doctor_acted,
+          'police_living', police_living,
+          'police_acted', police_acted,
+          'wolf_ballot_round', r.wolf_ballot_round,
+          'blocking', to_jsonb(blocking)
+        )
+      );
+    elsif r.phase in ('DAY_STRAW_VOTE', 'DAY_EXILE_VOTE', 'DAY_EXILE_REVOTE') then
+      if r.phase = 'DAY_STRAW_VOTE' then v_stage := 'straw';
+      elsif r.phase = 'DAY_EXILE_VOTE' then v_stage := 'exile';
+      else v_stage := 'exile_revote';
+      end if;
+      select count(*) into votes_cast from public.day_votes
+      where room_id = p_room_id and day_number = r.day_number and stage = v_stage and target_id is not null;
+      host_status := host_status || jsonb_build_object(
+        'votes', jsonb_build_object(
+          'cast', votes_cast,
+          'needed', living,
+          'stage', v_stage
+        )
+      );
+    elsif r.phase in ('DAY_ANNOUNCE', 'DAY_DEFENSE', 'DAY_EXECUTE') then
+      host_status := host_status || jsonb_build_object(
+        'ready', jsonb_build_object(
+          'ready_count', ready_count,
+          'needed', living
+        )
+      );
+    end if;
+
+    private_json := private_json || jsonb_build_object('host_status', host_status);
+  end if;
 
   return jsonb_build_object(
     'room', jsonb_build_object(

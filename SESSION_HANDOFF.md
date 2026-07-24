@@ -1,6 +1,6 @@
 # Wolf Game — session handoff (read this first)
 
-**Last updated:** 2026-07-19 (end of build session)  
+**Last updated:** 2026-07-24 (host tools + night soft-lock fixes)  
 **Workspace:** `/home/da-006/Desktop/jatin/personal/wolf-game`  
 **Original product pack:** `../wolf-game-handoff/` (`PROMPT_FOR_OTHER_GROK.md`, `VALUES_TO_FILL.md`)
 
@@ -145,9 +145,17 @@ Full checklist: `../wolf-game-handoff/PROMPT_FOR_OTHER_GROK.md`.
 
 ---
 
+## 2026-07-24 fixes (apply on cloud)
+
+Embarrassing stuck night + no restart: night auto-advance requires **wolves + doctor + police**; with 8p (2 wolves) both wolves voting is not enough if doctor/police AFK or sabotaging. Host had force-advance but no progress board and no mid-game restart.
+
+**Cloud apply (non-destructive):** paste `supabase/patches/002_host_tools_night_status.sql` in SQL Editor. Also deploy new `dist/`.
+
+Verify: `npm run smoke` against cloud after patch (14 scenarios).
+
 ## Open work / next session ideas
 
-1. **Confirm cloud has stage hotpatch** (`npm run smoke` all green on cloud `.env`).
+1. **Confirm cloud has stage + host-tools patches** (`npm run smoke` all green on cloud `.env`).
 2. **Optional polish:** UX, empty states, timer countdown UI, analytics (user said optional).
 3. **APK (discussed, not built):** Capacitor wrap of same SPA → no static host; still needs Supabase + network. Machine had Java 11 but **no Android SDK** at last check. Scaffold Capacitor + install SDK to produce debug APK.
 4. **Deploy:** user uploads `dist/` when ready; set `VITE_*` at build time.

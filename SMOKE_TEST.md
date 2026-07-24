@@ -23,6 +23,20 @@ npm run build
 | `reconnect_same_token` | refresh restores seat |
 | `host_advance_covers_phases` | host-only advance |
 | `play_again_resets_to_lobby` | seats kept, roles cleared |
+| `host_restart_mid_game_to_lobby` | host can restart during night |
+| `host_status_shows_night_progress` | host-only night board |
+| `doctor_police_skip_unblocks_night` | skip specials does not soft-lock |
+| `eight_player_wolves_only_stuck_then_full_night` | 8p: 2 wolves vote still night; then specials unlock |
+| `eight_player_specials_can_resubmit_before_resolve` | doctor/police can change target |
+
+### Frontend + backend E2E (Playwright)
+
+```bash
+# local supabase schema applied, then:
+VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=<local-anon> npm run dev -- --host 127.0.0.1 --port 5173
+# other terminal:
+VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=<local-anon> npm run e2e:8p
+```
 | `invalid_actions_rejected` | wrong-role / self-target rejected |
 | `session_survives_repeated_state_fetches` | poll thrash during ready |
 

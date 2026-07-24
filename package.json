@@ -13,7 +13,8 @@
     "test:integration": "vitest run src/integration --testTimeout=60000",
     "test:all": "npm run test:unit && npm run test:integration && npm run smoke",
     "test:watch": "vitest",
-    "smoke": "node scripts/smoke-game.mjs"
+    "smoke": "node scripts/smoke-game.mjs",
+    "e2e:8p": "node scripts/e2e-8p-night.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",
@@ -28,6 +29,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "playwright": "^1.52.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",

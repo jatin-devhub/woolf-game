@@ -83,7 +83,8 @@ export async function startGame(session: Session): Promise<void> {
 export async function submitNightAction(
   session: Session,
   actionType: 'kill_vote' | 'protect' | 'peek',
-  targetId: string,
+  /** Null = skip (doctor/police only). */
+  targetId: string | null,
 ): Promise<void> {
   const { error } = await supabase.rpc('submit_night_action', {
     p_room_id: session.roomId,

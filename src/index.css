@@ -55,3 +55,32 @@ input {
 .phase-danger {
   background: radial-gradient(900px 500px at 50% -20%, #3f1212 0%, #0b0a14 60%);
 }
+
+/* Make mandatory CTAs hard to ignore */
+.action-pulse {
+  animation: action-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes action-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+  }
+}
+
+.action-glow {
+  animation: action-glow 2.2s ease-in-out infinite;
+}
+
+@keyframes action-glow {
+  0%,
+  100% {
+    border-color: rgba(251, 191, 36, 0.45);
+  }
+  50% {
+    border-color: rgba(251, 191, 36, 0.85);
+  }
+}

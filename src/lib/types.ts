@@ -65,6 +65,30 @@ export interface RoomPublic {
   ready_count: number
 }
 
+/** Host-only progress board (role counts only — never night identities). */
+export interface HostStatus {
+  phase: Phase
+  night?: {
+    wolves_living: number
+    wolves_voted: number
+    doctor_living: number
+    doctor_acted: number
+    police_living: number
+    police_acted: number
+    wolf_ballot_round: number
+    blocking: string[]
+  }
+  votes?: {
+    cast: number
+    needed: number
+    stage: string
+  }
+  ready?: {
+    ready_count: number
+    needed: number
+  }
+}
+
 export interface YouPrivate {
   player_id: string
   display_name: string
@@ -85,9 +109,11 @@ export interface YouPrivate {
     target_name: string
     result: string
   } | null
-  my_night_actions?: Record<string, string>
+  /** Maps action_type → target_id (null target = doctor/police skip). */
+  my_night_actions?: Record<string, string | null>
   my_day_vote?: string | null
   i_am_ready?: boolean
+  host_status?: HostStatus
 }
 
 export interface RoomState {

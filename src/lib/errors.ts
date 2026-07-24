@@ -28,7 +28,7 @@ export function friendlyError(raw: string): string {
     READY_NOT_APPLICABLE: 'Ready is not needed right now.',
     CANNOT_ADVANCE: 'Cannot advance from this phase.',
     NOT_ENDED: 'Game is still going.',
-    CANNOT_LEAVE_IN_GAME: 'Leave is only allowed in the lobby.',
+    CANNOT_LEAVE_IN_GAME: 'Leave is only allowed in the lobby. Host can Restart to lobby.',
   }
 
   if (map[msg]) return map[msg]

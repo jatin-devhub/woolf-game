@@ -31,13 +31,17 @@ Min **3**, max **12**. Best with **5+**.
 
 ## Night
 
-1. Wolves vote (they see each other and live vote tallies).
-2. Doctor protects (optional if AFK).
-3. Police peeks (optional if AFK).
+1. Wolves vote (they see each other and live vote tallies). **Required.**
+2. Doctor protects someone (**required** — self OK).
+3. Police investigates someone (**required**).
 4. Resolution: doctor protect applies after wolf target is chosen.
 5. **Wolf tie (first ballot):** revote among tied targets only. **Still tied:** server picks one at random among the tie.
 
-Night ends when required roles have acted, host advances, or (if enabled) the timer fires.
+Night ends when wolves + living doctor/police have all acted, host resolves night, or (if enabled) the timer fires.
+
+The app shows a full-screen **Action required** UI for anyone who still must pick a target or tap Ready — so turns are hard to miss.
+
+**Host board (host only):** shows wolves voted X/Y, whether doctor/police acted, day vote counts, and ready counts — never who has which role. Use it to nudge people, not to skip steps lightly.
 
 ## Day (two votes)
 
@@ -49,7 +53,7 @@ Night ends when required roles have acted, host advances, or (if enabled) the ti
 
 ## Timers
 
-Default: **off**. Host can enable recommended timers (night/votes 45s, defense 90s). Host can always force advance.
+Default: **off**. Host can enable recommended timers (night/votes 45s, defense 90s). Host can always force advance a phase, and can **restart to lobby** mid-game (same seats, roles cleared).
 
 ## How to join
 

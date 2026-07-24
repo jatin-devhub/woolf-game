@@ -373,6 +373,192 @@ scenario('session_survives_repeated_state_fetches', async () => {
   log('session continuity under poll thrash OK')
 })
 
+scenario('host_restart_mid_game_to_lobby', async () => {
+  const lobby = await openLobby(['RstH', 'RstA', 'RstB'])
+  await start(lobby.roomId, lobby.players[0].token)
+  let st = await state(lobby.roomId, lobby.players[0].token)
+  assert(st.room.phase === 'NIGHT', 'mid-game night')
+  // Non-host cannot restart
+  let blocked = false
+  try {
+    await playAgain(lobby.roomId, lobby.players[1].token)
+  } catch (e) {
+    blocked = /HOST_ONLY|host/i.test(e.message)
+  }
+  assert(blocked, 'non-host restart blocked')
+  await playAgain(lobby.roomId, lobby.players[0].token)
+  st = await state(lobby.roomId, lobby.players[0].token)
+  assert(st.room.phase === 'LOBBY', 'restart → lobby')
+  assert(st.you.role == null, 'roles cleared mid-game')
+  assert(st.room.player_count === 3, 'seats kept')
+  log('host mid-game restart → lobby OK')
+})
+
+scenario('host_status_shows_night_progress', async () => {
+  const lobby = await openLobby(['HsH', 'HsA', 'HsB', 'HsC'])
+  await start(lobby.roomId, lobby.players[0].token)
+  const hostSt = await state(lobby.roomId, lobby.players[0].token)
+  assert(hostSt.you.is_host, 'first player host')
+  assert(hostSt.you.host_status?.night, 'host sees night board')
+  assert(
+    hostSt.you.host_status.night.wolves_living >= 1,
+    'host sees living wolves count',
+  )
+  // Non-host must not receive host_status
+  const other = await state(lobby.roomId, lobby.players[1].token)
+  assert(!other.you.host_status, 'non-host has no host_status')
+  log('host night status private OK')
+})
+
+scenario('doctor_police_skip_unblocks_night', async () => {
+  const lobby = await openLobby(['SkH', 'SkA', 'SkB', 'SkC'])
+  await start(lobby.roomId, lobby.players[0].token)
+  const snaps = await allStates(lobby.roomId, lobby.players)
+  const roles = byRole(snaps)
+  assert(roles.doctor?.length === 1, 'doctor at 4p')
+  assert(roles.police?.length === 1, 'police at 4p')
+  const wolf = roles.werewolf[0]
+  const doctor = roles.doctor[0]
+  const police = roles.police[0]
+  const victim = livingPlayers(wolf.state).find(
+    (p) => p.id !== wolf.playerId && !(wolf.state.you.wolf_allies || []).some((a) => a.id === p.id),
+  )
+  assert(victim, 'victim')
+  await nightAction(lobby.roomId, wolf.token, 'kill_vote', victim.id)
+  // Skip specials (null target) — must not soft-lock night
+  await nightAction(lobby.roomId, doctor.token, 'protect', null)
+  await nightAction(lobby.roomId, police.token, 'peek', null)
+  const st = await tick(lobby.roomId, lobby.players[0].token)
+  assert(
+    ['DAY_ANNOUNCE', 'ENDED'].includes(st.room.phase),
+    `skip path advanced, got ${st.room.phase}`,
+  )
+  log(`doctor/police skip → ${st.room.phase}`)
+})
+
+/**
+ * Reproduce the embarrassing 8p office game:
+ * 2 wolves vote first → night must STILL be NIGHT until doctor + police act.
+ * Then all specials act → morning.
+ */
+scenario('eight_player_wolves_only_stuck_then_full_night', async () => {
+  const names = ['H1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8']
+  const lobby = await openLobby(names)
+  await start(lobby.roomId, lobby.players[0].token)
+  let snaps = await allStates(lobby.roomId, lobby.players)
+  const roles = byRole(snaps)
+  assert(roles.werewolf?.length === 2, `expected 2 wolves, got ${roles.werewolf?.length}`)
+  assert(roles.doctor?.length === 1, '1 doctor at 8p')
+  assert(roles.police?.length === 1, '1 police at 8p')
+  assert(roles.villager?.length === 4, '4 villagers at 8p')
+
+  const wolves = roles.werewolf
+  const doctor = roles.doctor[0]
+  const police = roles.police[0]
+
+  // Host (or any seat) must see host_status if host
+  const hostSt = await state(lobby.roomId, lobby.players[0].token)
+  assert(hostSt.you.is_host, 'first seat is host')
+  assert(hostSt.you.host_status?.night, 'host night board present')
+  assert(hostSt.you.host_status.night.wolves_living === 2, 'host sees 2 wolves')
+  assert(
+    (hostSt.you.host_status.night.blocking || []).includes('wolves'),
+    'blocking includes wolves before votes',
+  )
+
+  // Pick a non-wolf victim both wolves can target
+  const victim = livingPlayers(wolves[0].state).find(
+    (p) =>
+      p.id !== wolves[0].playerId &&
+      !(wolves[0].state.you.wolf_allies || []).some((a) => a.id === p.id),
+  )
+  assert(victim, 'victim for kill')
+
+  // Both wolves vote — THIS is the stuck office scenario if specials AFK
+  await nightAction(lobby.roomId, wolves[0].token, 'kill_vote', victim.id)
+  await nightAction(lobby.roomId, wolves[1].token, 'kill_vote', victim.id)
+
+  let mid = await tick(lobby.roomId, lobby.players[0].token)
+  assert(mid.room.phase === 'NIGHT', 'STUCK/WAIT: still night after both wolves only')
+  assert(mid.you.host_status?.night?.wolves_voted === 2, 'host sees 2/2 wolf votes')
+  const blocking = mid.you.host_status?.night?.blocking || []
+  assert(blocking.includes('doctor') || blocking.includes('police'), `still blocking specials: ${blocking}`)
+
+  // Doctor + police can still act (backend accepts)
+  const protectTarget = livingPlayers(doctor.state)[0]
+  const peekTarget = livingPlayers(police.state).find((p) => p.id !== police.playerId)
+  assert(protectTarget && peekTarget, 'special targets')
+  await nightAction(lobby.roomId, doctor.token, 'protect', protectTarget.id)
+  await nightAction(lobby.roomId, police.token, 'peek', peekTarget.id)
+
+  mid = await tick(lobby.roomId, lobby.players[0].token)
+  assert(
+    ['DAY_ANNOUNCE', 'ENDED'].includes(mid.room.phase),
+    `after all night roles expected morning/end, got ${mid.room.phase}`,
+  )
+
+  // Police got a private peek
+  const policeView = await state(lobby.roomId, police.token)
+  assert(policeView.you.last_peek, 'police has peek result')
+  // host_status only for host seat (police may be host if roles shuffled that way)
+  if (!policeView.you.is_host) {
+    assert(!policeView.you.host_status, 'non-host no host board')
+  } else {
+    assert(policeView.you.host_status, 'host police still has host board')
+  }
+
+  // Villagers never leak roles mid-game
+  for (const v of roles.villager || []) {
+    const st = await state(lobby.roomId, v.token)
+    assertNoRoleLeak(st)
+  }
+
+  log(`8p night: wolves-only stuck verified, then full resolve → ${mid.room.phase}`)
+})
+
+/** Doctor/police must be able to change target before lock (upsert). */
+scenario('eight_player_specials_can_resubmit_before_resolve', async () => {
+  const lobby = await openLobby(['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8'])
+  await start(lobby.roomId, lobby.players[0].token)
+  const snaps = await allStates(lobby.roomId, lobby.players)
+  const roles = byRole(snaps)
+  const doctor = roles.doctor[0]
+  const police = roles.police[0]
+  const wolves = roles.werewolf
+  const living = livingPlayers(doctor.state)
+  assert(living.length >= 2, 'enough living')
+
+  await nightAction(lobby.roomId, doctor.token, 'protect', living[0].id)
+  await nightAction(lobby.roomId, doctor.token, 'protect', living[1].id)
+  let st = await state(lobby.roomId, doctor.token)
+  assert(
+    st.you.my_night_actions?.protect === living[1].id,
+    'doctor resubmit updates target',
+  )
+
+  const peekA = living.find((p) => p.id !== police.playerId)
+  const peekB = living.find((p) => p.id !== police.playerId && p.id !== peekA.id)
+  await nightAction(lobby.roomId, police.token, 'peek', peekA.id)
+  if (peekB) {
+    await nightAction(lobby.roomId, police.token, 'peek', peekB.id)
+    st = await state(lobby.roomId, police.token)
+    assert(st.you.my_night_actions?.peek === peekB.id, 'police resubmit updates')
+  }
+
+  // Finish night so room does not linger
+  const victim = livingPlayers(wolves[0].state).find(
+    (p) =>
+      p.id !== wolves[0].playerId &&
+      !(wolves[0].state.you.wolf_allies || []).some((a) => a.id === p.id),
+  )
+  for (const w of wolves) {
+    await nightAction(lobby.roomId, w.token, 'kill_vote', victim.id)
+  }
+  st = await tick(lobby.roomId, lobby.players[0].token)
+  assert(['DAY_ANNOUNCE', 'ENDED'].includes(st.room.phase), `resolved got ${st.room.phase}`)
+  log('8p specials resubmit OK')
+})
+
 // ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------

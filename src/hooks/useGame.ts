@@ -165,7 +165,7 @@ export function useGame() {
     exitToHome,
     setTimers: (v: boolean) => run(() => api.setRoomTimers(session!, v)),
     start: () => run(() => api.startGame(session!)),
-    nightAction: (type: 'kill_vote' | 'protect' | 'peek', targetId: string) =>
+    nightAction: (type: 'kill_vote' | 'protect' | 'peek', targetId: string | null) =>
       run(() => api.submitNightAction(session!, type, targetId)),
     dayVote: (stage: 'straw' | 'exile' | 'exile_revote', targetId: string) =>
       run(() => api.submitDayVote(session!, stage, targetId)),
